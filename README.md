@@ -7,9 +7,10 @@
 [![License: GPL v2+](https://img.shields.io/badge/License-GPLv2%2B-blue.svg)](LICENSE)
 
 A thin, dependency-free cgo binding over the [Xapian](https://xapian.org) C++
-search library. It exposes writable/read databases, documents, queries and
-search results — with no application-domain assumptions — so any Go program can
-build full-text search on top of Xapian.
+search library ([source](https://github.com/xapian/xapian)). It exposes
+writable/read databases, documents, queries and search results — with no
+application-domain assumptions — so any Go program can build full-text search on
+top of Xapian.
 
 Because cgo cannot call C++ directly (name mangling, templates, exceptions,
 RAII), every call crosses through a small `extern "C"` shim (`shim.cc` /
