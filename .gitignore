@@ -1,0 +1,4 @@
+# Test/scratch index dirs
+/tmp/
+*.out
+*.test

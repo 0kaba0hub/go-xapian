@@ -1,5 +1,11 @@
 # go-xapian
 
+[![ci](https://github.com/0kaba0hub/go-xapian/actions/workflows/ci.yml/badge.svg)](https://github.com/0kaba0hub/go-xapian/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/0kaba0hub/go-xapian.svg)](https://pkg.go.dev/github.com/0kaba0hub/go-xapian)
+[![Go Report Card](https://goreportcard.com/badge/github.com/0kaba0hub/go-xapian)](https://goreportcard.com/report/github.com/0kaba0hub/go-xapian)
+[![Release](https://img.shields.io/github/v/release/0kaba0hub/go-xapian)](https://github.com/0kaba0hub/go-xapian/releases)
+[![License: GPL v2+](https://img.shields.io/badge/License-GPLv2%2B-blue.svg)](LICENSE)
+
 A thin, dependency-free cgo binding over the [Xapian](https://xapian.org) C++
 search library. It exposes writable/read databases, documents, queries and
 search results — with no application-domain assumptions — so any Go program can
