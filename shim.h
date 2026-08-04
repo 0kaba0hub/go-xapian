@@ -46,8 +46,11 @@ int fcx_db_compact(fcx_db *db, const char *dest, char **err_out);
 /* --- document ------------------------------------------------------------ */
 fcx_doc *fcx_doc_new(void);
 void fcx_doc_free(fcx_doc *d);
-int fcx_doc_add_term(fcx_doc *d, const char *term, char **err_out);
-int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, char **err_out);
+/* term is not NUL-terminated: the caller passes the bytes and their length, so
+ * a Go string can be handed over without a C copy. Both build a std::string
+ * that Xapian keeps; neither retains the pointer past the call. */
+int fcx_doc_add_term(fcx_doc *d, const char *term, size_t len, char **err_out);
+int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, size_t len, char **err_out);
 
 /* --- query --------------------------------------------------------------- */
 /* op values mirror Xapian::Query::op */
@@ -57,7 +60,9 @@ enum {
 	FCX_OP_AND_NOT = 2
 };
 fcx_query *fcx_query_wildcard(const char *pattern, char **err_out);
-fcx_query *fcx_query_term(const char *term, char **err_out);
+/* term is not NUL-terminated; see fcx_doc_add_term. Kept symmetric with it
+ * so a term that can be indexed can also be queried. */
+fcx_query *fcx_query_term(const char *term, size_t len, char **err_out);
 fcx_query *fcx_query_match_all(char **err_out);
 fcx_query *fcx_query_combine(int op, fcx_query *a, fcx_query *b,
                              char **err_out);

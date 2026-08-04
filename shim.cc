@@ -195,17 +195,17 @@ fcx_doc *fcx_doc_new(void) { return new Xapian::Document(); }
 
 void fcx_doc_free(fcx_doc *d) { delete static_cast<Xapian::Document *>(d); }
 
-int fcx_doc_add_term(fcx_doc *d, const char *term, char **err_out) {
+int fcx_doc_add_term(fcx_doc *d, const char *term, size_t len, char **err_out) {
 	FCX_TRY {
-		static_cast<Xapian::Document *>(d)->add_term(term);
+		static_cast<Xapian::Document *>(d)->add_term(std::string(term, len));
 		return 0;
 	}
 	FCX_CATCH(-1)
 }
 
-int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, char **err_out) {
+int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, size_t len, char **err_out) {
 	FCX_TRY {
-		static_cast<Xapian::Document *>(d)->add_boolean_term(term);
+		static_cast<Xapian::Document *>(d)->add_boolean_term(std::string(term, len));
 		return 0;
 	}
 	FCX_CATCH(-1)
@@ -220,8 +220,8 @@ fcx_query *fcx_query_wildcard(const char *pattern, char **err_out) {
 	FCX_CATCH(nullptr)
 }
 
-fcx_query *fcx_query_term(const char *term, char **err_out) {
-	FCX_TRY { return new Xapian::Query(term); }
+fcx_query *fcx_query_term(const char *term, size_t len, char **err_out) {
+	FCX_TRY { return new Xapian::Query(std::string(term, len)); }
 	FCX_CATCH(nullptr)
 }
 
