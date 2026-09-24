@@ -117,3 +117,61 @@ func TestAddDocumentLetsTheDatabaseChooseTheID(t *testing.T) {
 		t.Errorf("the last id reads %d, the database handed out %v", last, ids)
 	}
 }
+
+// A unique term is the address of a document: it finds it, reads what it
+// carries, and deletes it, with no match decision in between.
+func TestATermFindsReadsAndDeletesTheDocument(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	w, err := OpenWDB(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	for _, folders := range [][]string{{"XFa", "XFb"}, {"XFb"}} {
+		d := NewDoc()
+		if err := d.AddBooleanTerm("G" + folders[0]); err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range folders {
+			if err := d.AddBooleanTerm(f); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := w.AddDocument(d); err != nil {
+			t.Fatal(err)
+		}
+		d.Free()
+	}
+	if err := w.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	ids, err := w.DocIDsByTerm("XFb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("the term names %d documents, two carry it", len(ids))
+	}
+	terms, err := w.DocTerms(ids[0], "XF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(terms) != 2 || terms[0] != "XFa" || terms[1] != "XFb" {
+		t.Errorf("the document carries %v, want XFa and XFb", terms)
+	}
+
+	if err := w.DeleteByTerm("XFa"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	left, err := w.DocIDsByTerm("XFb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 1 {
+		t.Errorf("after deleting by one term %d documents carry the other, want 1", len(left))
+	}
+}

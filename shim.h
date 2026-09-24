@@ -26,6 +26,17 @@ unsigned int fcx_wdb_add_document(fcx_wdb *w, fcx_doc *d, char **err_out);
 int fcx_wdb_replace_document(fcx_wdb *w, unsigned int docid, fcx_doc *d,
                              char **err_out);
 /* existed_out: 1 when the document was present. DocNotFound is not an error. */
+/* Deletes every document carrying term (Xapian's unique-term delete). */
+int fcx_wdb_delete_by_term(fcx_wdb *w, const char *term, size_t len,
+                           char **err_out);
+/* Docids carrying term, ascending, up to cap; returns the count, -1 on error.
+ * Reads the postlist, so it costs no match decision. */
+int fcx_wdb_docids_by_term(fcx_wdb *w, const char *term, size_t len,
+                           unsigned int *buf, size_t cap, char **err_out);
+/* The terms of one document that start with prefix, as a NUL-separated block.
+ * The caller frees the block with free(); len_out is its length. */
+char *fcx_wdb_doc_terms(fcx_wdb *w, unsigned int docid, const char *prefix,
+                        size_t plen, size_t *len_out, char **err_out);
 int fcx_wdb_delete_document(fcx_wdb *w, unsigned int docid, int *existed_out,
                             char **err_out);
 int fcx_wdb_set_metadata(fcx_wdb *w, const char *key, const char *value,
@@ -84,6 +95,9 @@ size_t fcx_mset_size(fcx_mset *m);
 unsigned int fcx_mset_docid(fcx_mset *m, size_t idx, double *weight_out);
 /* The value in slot for the hit at idx. The bytes belong to the caller and are
  * freed with free(); len_out is set to their length. NULL means empty. */
+/* Docids carrying term, ascending, up to cap; returns the count, -1 on error. */
+int fcx_db_docids_by_term(fcx_db *db, const char *term, size_t len,
+                          unsigned int *buf, size_t cap, char **err_out);
 char *fcx_mset_value(fcx_mset *m, size_t idx, unsigned int slot, size_t *len_out,
                      char **err_out);
 void fcx_mset_free(fcx_mset *m);

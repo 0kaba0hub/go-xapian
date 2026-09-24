@@ -76,6 +76,68 @@ int fcx_wdb_replace_document(fcx_wdb *w, unsigned int docid, fcx_doc *d,
 	FCX_CATCH(-1)
 }
 
+int fcx_wdb_delete_by_term(fcx_wdb *w, const char *term, size_t len,
+                           char **err_out) {
+	FCX_TRY {
+		static_cast<Xapian::WritableDatabase *>(w)->delete_document(
+			std::string(term, len));
+		return 0;
+	}
+	FCX_CATCH(-1)
+}
+
+static int fcx_docids_by_term(Xapian::Database *db, const char *term, size_t len,
+                              unsigned int *buf, size_t cap, char **err_out) {
+	FCX_TRY {
+		std::string t(term, len);
+		size_t n = 0;
+		for (Xapian::PostingIterator it = db->postlist_begin(t);
+		     it != db->postlist_end(t) && n < cap; ++it)
+			buf[n++] = *it;
+		return static_cast<int>(n);
+	}
+	FCX_CATCH(-1)
+}
+
+int fcx_wdb_docids_by_term(fcx_wdb *w, const char *term, size_t len,
+                           unsigned int *buf, size_t cap, char **err_out) {
+	return fcx_docids_by_term(static_cast<Xapian::WritableDatabase *>(w), term,
+	                          len, buf, cap, err_out);
+}
+
+int fcx_db_docids_by_term(fcx_db *db, const char *term, size_t len,
+                          unsigned int *buf, size_t cap, char **err_out) {
+	return fcx_docids_by_term(static_cast<Xapian::Database *>(db), term, len,
+	                          buf, cap, err_out);
+}
+
+char *fcx_wdb_doc_terms(fcx_wdb *w, unsigned int docid, const char *prefix,
+                        size_t plen, size_t *len_out, char **err_out) {
+	FCX_TRY {
+		Xapian::Document d =
+			static_cast<Xapian::WritableDatabase *>(w)->get_document(docid);
+		std::string pre(prefix, plen), out;
+		for (Xapian::TermIterator it = d.termlist_begin();
+		     it != d.termlist_end(); ++it) {
+			std::string t = *it;
+			if (!pre.empty() && t.compare(0, pre.size(), pre) != 0)
+				continue;
+			out.append(t);
+			out.push_back('\0');
+		}
+		if (len_out != nullptr)
+			*len_out = out.size();
+		if (out.empty())
+			return nullptr;
+		char *buf = static_cast<char *>(malloc(out.size()));
+		if (buf == nullptr)
+			return nullptr;
+		memcpy(buf, out.data(), out.size());
+		return buf;
+	}
+	FCX_CATCH(nullptr)
+}
+
 int fcx_wdb_delete_document(fcx_wdb *w, unsigned int docid, int *existed_out,
                             char **err_out) {
 	if (existed_out != nullptr)

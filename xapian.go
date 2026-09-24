@@ -24,6 +24,7 @@ import "C"
 
 import (
 	"errors"
+	"strings"
 	"unsafe"
 )
 
@@ -89,6 +90,48 @@ func (w *WDB) ReplaceDocument(docid uint32, d *Doc) error {
 
 // DeleteDocument removes docid. existed reports whether it was present;
 // a not-found document is not an error.
+// DeleteByTerm removes every document carrying term. With a term that is
+// unique per document this is the delete; with one shared by several it is
+// the delete of all of them.
+func (w *WDB) DeleteByTerm(term string) error {
+	var cerr *C.char
+	if C.fcx_wdb_delete_by_term(w.h, termPtr(term), C.size_t(len(term)), &cerr) != 0 {
+		return takeErr(cerr)
+	}
+	return nil
+}
+
+// DocIDsByTerm reads the term's posting list: the ids of the documents that
+// carry it, ascending, without asking the matcher anything.
+func (w *WDB) DocIDsByTerm(term string) ([]uint32, error) {
+	return docIDsByTerm(func(buf *C.uint, cap C.size_t, cerr **C.char) C.int {
+		return C.fcx_wdb_docids_by_term(w.h, termPtr(term), C.size_t(len(term)), buf, cap, cerr)
+	})
+}
+
+// DocTerms lists one document's terms that start with prefix. An empty prefix
+// lists them all.
+func (w *WDB) DocTerms(docid uint32, prefix string) ([]string, error) {
+	var cerr *C.char
+	var n C.size_t
+	p := C.fcx_wdb_doc_terms(w.h, C.uint(docid), termPtr(prefix), C.size_t(len(prefix)), &n, &cerr)
+	if p == nil {
+		if cerr != nil {
+			return nil, takeErr(cerr)
+		}
+		return nil, nil
+	}
+	defer C.free(unsafe.Pointer(p))
+	block := C.GoStringN(p, C.int(n))
+	var out []string
+	for _, t := range strings.Split(block, "\x00") {
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
 func (w *WDB) DeleteDocument(docid uint32) (existed bool, err error) {
 	var cerr *C.char
 	var cex C.int
@@ -371,6 +414,34 @@ type MSetEntry struct {
 // alone no longer says.
 func (d *DB) SearchWithValue(q *Query, slot uint32) ([]MSetEntry, error) {
 	return d.search(q, true, slot)
+}
+
+// DocIDsByTerm reads the term's posting list on the read database.
+func (d *DB) DocIDsByTerm(term string) ([]uint32, error) {
+	return docIDsByTerm(func(buf *C.uint, cap C.size_t, cerr **C.char) C.int {
+		return C.fcx_db_docids_by_term(d.h, termPtr(term), C.size_t(len(term)), buf, cap, cerr)
+	})
+}
+
+// docIDsByTerm grows the buffer until the shim stops filling it: a term may
+// name one document or every document in the database.
+func docIDsByTerm(fill func(buf *C.uint, cap C.size_t, cerr **C.char) C.int) ([]uint32, error) {
+	for capacity := 64; ; capacity *= 4 {
+		buf := make([]C.uint, capacity)
+		var cerr *C.char
+		n := int(fill(&buf[0], C.size_t(capacity), &cerr))
+		if n < 0 {
+			return nil, takeErr(cerr)
+		}
+		if n == capacity {
+			continue
+		}
+		out := make([]uint32, n)
+		for i := 0; i < n; i++ {
+			out[i] = uint32(buf[i])
+		}
+		return out, nil
+	}
 }
 
 // Search runs q against the read database and returns the ranked hits.
