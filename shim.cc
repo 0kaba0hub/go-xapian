@@ -211,6 +211,15 @@ int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, size_t len, char **er
 	FCX_CATCH(-1)
 }
 
+int fcx_doc_set_value(fcx_doc *d, unsigned int slot, const char *val, size_t len,
+                      char **err_out) {
+	FCX_TRY {
+		static_cast<Xapian::Document *>(d)->add_value(slot, std::string(val, len));
+		return 0;
+	}
+	FCX_CATCH(-1)
+}
+
 /* --- query --------------------------------------------------------------- */
 
 fcx_query *fcx_query_wildcard(const char *pattern, char **err_out) {
@@ -284,6 +293,24 @@ unsigned int fcx_mset_docid(fcx_mset *m, size_t idx, double *weight_out) {
 	if (weight_out != nullptr)
 		*weight_out = it.get_weight();
 	return *it;
+}
+
+char *fcx_mset_value(fcx_mset *m, size_t idx, unsigned int slot, size_t *len_out,
+                     char **err_out) {
+	FCX_TRY {
+		Xapian::MSet *ms = static_cast<Xapian::MSet *>(m);
+		std::string v = (*ms)[idx].get_document().get_value(slot);
+		if (len_out != nullptr)
+			*len_out = v.size();
+		if (v.empty())
+			return nullptr;
+		char *out = static_cast<char *>(malloc(v.size()));
+		if (out == nullptr)
+			return nullptr;
+		memcpy(out, v.data(), v.size());
+		return out;
+	}
+	FCX_CATCH(nullptr)
 }
 
 void fcx_mset_free(fcx_mset *m) { delete static_cast<Xapian::MSet *>(m); }

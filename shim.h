@@ -51,6 +51,10 @@ void fcx_doc_free(fcx_doc *d);
  * that Xapian keeps; neither retains the pointer past the call. */
 int fcx_doc_add_term(fcx_doc *d, const char *term, size_t len, char **err_out);
 int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, size_t len, char **err_out);
+/* A document value: opaque bytes in a numbered slot, returned with a search
+ * hit. Unlike a term it is not indexed, and unlike a term it can be read back. */
+int fcx_doc_set_value(fcx_doc *d, unsigned int slot, const char *val, size_t len,
+                      char **err_out);
 
 /* --- query --------------------------------------------------------------- */
 /* op values mirror Xapian::Query::op */
@@ -73,6 +77,10 @@ fcx_mset *fcx_db_search(fcx_db *db, fcx_query *q, char **err_out);
 size_t fcx_mset_size(fcx_mset *m);
 /* idx < fcx_mset_size(); weight_out may be NULL. */
 unsigned int fcx_mset_docid(fcx_mset *m, size_t idx, double *weight_out);
+/* The value in slot for the hit at idx. The bytes belong to the caller and are
+ * freed with free(); len_out is set to their length. NULL means empty. */
+char *fcx_mset_value(fcx_mset *m, size_t idx, unsigned int slot, size_t *len_out,
+                     char **err_out);
 void fcx_mset_free(fcx_mset *m);
 
 #ifdef __cplusplus

@@ -249,6 +249,16 @@ func (d *Doc) AddBooleanTerm(term string) error {
 	return nil
 }
 
+// SetValue stores opaque bytes in a numbered slot. A value is not indexed and
+// not searchable, and unlike a term it comes back with a search hit.
+func (d *Doc) SetValue(slot uint32, value string) error {
+	var cerr *C.char
+	if C.fcx_doc_set_value(d.h, C.uint(slot), termPtr(value), C.size_t(len(value)), &cerr) != 0 {
+		return takeErr(cerr)
+	}
+	return nil
+}
+
 // empty backs the pointer for a zero-length term: unsafe.StringData("") may be
 // nil, and a nil pointer with length zero is not the same argument to C as a
 // valid pointer with length zero.
@@ -330,10 +340,23 @@ func (q *Query) Free() {
 type MSetEntry struct {
 	DocID  uint32
 	Weight float64
+	// Value is the document value asked for by SearchWithValue, empty otherwise.
+	Value string
+}
+
+// SearchWithValue is Search, with the value in slot carried back on every hit:
+// a database holding documents of more than one mailbox needs what the docid
+// alone no longer says.
+func (d *DB) SearchWithValue(q *Query, slot uint32) ([]MSetEntry, error) {
+	return d.search(q, true, slot)
 }
 
 // Search runs q against the read database and returns the ranked hits.
 func (d *DB) Search(q *Query) ([]MSetEntry, error) {
+	return d.search(q, false, 0)
+}
+
+func (d *DB) search(q *Query, withValue bool, slot uint32) ([]MSetEntry, error) {
 	var cerr *C.char
 	m := C.fcx_db_search(d.h, q.h, &cerr)
 	if m == nil {
@@ -345,7 +368,19 @@ func (d *DB) Search(q *Query) ([]MSetEntry, error) {
 	for i := 0; i < n; i++ {
 		var w C.double
 		docid := C.fcx_mset_docid(m, C.size_t(i), &w)
-		out = append(out, MSetEntry{DocID: uint32(docid), Weight: float64(w)})
+		ent := MSetEntry{DocID: uint32(docid), Weight: float64(w)}
+		if withValue {
+			var vlen C.size_t
+			var verr *C.char
+			vp := C.fcx_mset_value(m, C.size_t(i), C.uint(slot), &vlen, &verr)
+			if vp != nil {
+				ent.Value = C.GoStringN(vp, C.int(vlen))
+				C.free(unsafe.Pointer(vp))
+			} else if verr != nil {
+				return nil, takeErr(verr)
+			}
+		}
+		out = append(out, ent)
 	}
 	return out, nil
 }
