@@ -72,3 +72,48 @@ func TestSearchCarriesTheDocumentValue(t *testing.T) {
 		}
 	}
 }
+
+// The database chooses the id, so nothing on our side counts documents: the
+// identity a hit is recognised by is the value, not the number.
+func TestAddDocumentLetsTheDatabaseChooseTheID(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	w, err := OpenWDB(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []uint32
+	for _, v := range []string{"INBOX:1", "INBOX:2", "Archive:1"} {
+		d := NewDoc()
+		if err := d.AddTerm("Zx"); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.SetValue(1, v); err != nil {
+			t.Fatal(err)
+		}
+		id, aerr := w.AddDocument(d)
+		if aerr != nil {
+			t.Fatal(aerr)
+		}
+		d.Free()
+		ids = append(ids, id)
+	}
+	if err := w.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	last, err := w.LastDocID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+
+	seen := map[uint32]bool{}
+	for _, id := range ids {
+		if id == 0 || seen[id] {
+			t.Fatalf("the ids are %v, which is not three distinct non-zero ids", ids)
+		}
+		seen[id] = true
+	}
+	if last < ids[len(ids)-1] {
+		t.Errorf("the last id reads %d, the database handed out %v", last, ids)
+	}
+}

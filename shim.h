@@ -21,6 +21,8 @@ typedef void fcx_mset;  /* Xapian::MSet */
 fcx_wdb *fcx_wdb_open(const char *path, char **err_out);
 int fcx_wdb_commit(fcx_wdb *w, char **err_out);
 void fcx_wdb_close(fcx_wdb *w);
+/* Lets the database choose the id: returns it, or 0 with err_out set. */
+unsigned int fcx_wdb_add_document(fcx_wdb *w, fcx_doc *d, char **err_out);
 int fcx_wdb_replace_document(fcx_wdb *w, unsigned int docid, fcx_doc *d,
                              char **err_out);
 /* existed_out: 1 when the document was present. DocNotFound is not an error. */
@@ -30,6 +32,9 @@ int fcx_wdb_set_metadata(fcx_wdb *w, const char *key, const char *value,
                          char **err_out);
 char *fcx_wdb_get_metadata(fcx_wdb *w, const char *key, char **err_out);
 unsigned int fcx_wdb_get_doccount(fcx_wdb *w, char **err_out);
+/* The highest id handed out; 0 with err_out set on error, 0 and no error on an
+ * empty database. Says how close a long-lived store is to the type's limit. */
+unsigned int fcx_wdb_last_docid(fcx_wdb *w, char **err_out);
 int fcx_wdb_doc_exists(fcx_wdb *w, unsigned int docid, char **err_out);
 
 /* --- combined read-only database ---------------------------------------- */

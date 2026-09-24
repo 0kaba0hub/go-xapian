@@ -68,6 +68,17 @@ func (w *WDB) Close() {
 }
 
 // ReplaceDocument stores d under docid, replacing any existing document.
+// AddDocument lets the database choose the id, which is what a store keyed by
+// a document value rather than by its number wants.
+func (w *WDB) AddDocument(d *Doc) (uint32, error) {
+	var cerr *C.char
+	id := C.fcx_wdb_add_document(w.h, d.h, &cerr)
+	if id == 0 {
+		return 0, takeErr(cerr)
+	}
+	return uint32(id), nil
+}
+
 func (w *WDB) ReplaceDocument(docid uint32, d *Doc) error {
 	var cerr *C.char
 	if C.fcx_wdb_replace_document(w.h, C.uint(docid), d.h, &cerr) != 0 {
@@ -114,6 +125,17 @@ func (w *WDB) GetMetadata(key string) (string, error) {
 }
 
 // DocCount returns the number of documents in the writable database.
+// LastDocID is the highest id the database has handed out, which is what says
+// how close a long-lived store is to the limit of the type.
+func (w *WDB) LastDocID() (uint32, error) {
+	var cerr *C.char
+	id := C.fcx_wdb_last_docid(w.h, &cerr)
+	if id == 0 && cerr != nil {
+		return 0, takeErr(cerr)
+	}
+	return uint32(id), nil
+}
+
 func (w *WDB) DocCount() (uint32, error) {
 	var cerr *C.char
 	n := C.fcx_wdb_get_doccount(w.h, &cerr)

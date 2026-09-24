@@ -58,6 +58,14 @@ void fcx_wdb_close(fcx_wdb *w) {
 	delete static_cast<Xapian::WritableDatabase *>(w);
 }
 
+unsigned int fcx_wdb_add_document(fcx_wdb *w, fcx_doc *d, char **err_out) {
+	FCX_TRY {
+		return static_cast<Xapian::WritableDatabase *>(w)->add_document(
+			*static_cast<Xapian::Document *>(d));
+	}
+	FCX_CATCH(0)
+}
+
 int fcx_wdb_replace_document(fcx_wdb *w, unsigned int docid, fcx_doc *d,
                              char **err_out) {
 	FCX_TRY {
@@ -106,6 +114,13 @@ char *fcx_wdb_get_metadata(fcx_wdb *w, const char *key, char **err_out) {
 		return dup_error(v); /* plain malloc'd copy */
 	}
 	FCX_CATCH(nullptr)
+}
+
+unsigned int fcx_wdb_last_docid(fcx_wdb *w, char **err_out) {
+	FCX_TRY {
+		return static_cast<Xapian::WritableDatabase *>(w)->get_lastdocid();
+	}
+	FCX_CATCH(0)
 }
 
 unsigned int fcx_wdb_get_doccount(fcx_wdb *w, char **err_out) {
