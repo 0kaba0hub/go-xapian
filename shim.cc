@@ -264,12 +264,13 @@ int fcx_db_docids(fcx_db *db, unsigned int prev, unsigned int *buf, size_t cap,
 	FCX_CATCH(-1)
 }
 
-int fcx_db_compact(fcx_db *db, const char *dest, char **err_out) {
+int fcx_db_compact(fcx_db *db, const char *dest, int renumber, char **err_out) {
 	FCX_TRY {
-		static_cast<Xapian::Database *>(db)->compact(
-			dest, Xapian::DBCOMPACT_NO_RENUMBER |
-				      Xapian::DBCOMPACT_MULTIPASS |
-				      Xapian::Compactor::FULLER);
+		unsigned flags = Xapian::DBCOMPACT_MULTIPASS |
+				 Xapian::Compactor::FULLER;
+		if (renumber == 0)
+			flags |= Xapian::DBCOMPACT_NO_RENUMBER;
+		static_cast<Xapian::Database *>(db)->compact(dest, flags);
 		return 0;
 	}
 	FCX_CATCH(-1)

@@ -60,7 +60,9 @@ unsigned int fcx_db_get_doccount(fcx_db *db, char **err_out);
  * returns the count written, -1 on error. Iteration order is ascending. */
 int fcx_db_docids(fcx_db *db, unsigned int prev, unsigned int *buf,
                   size_t cap, char **err_out);
-int fcx_db_compact(fcx_db *db, const char *dest, char **err_out);
+/* renumber != 0 lets the merge renumber documents, which a store whose
+ * identity lives in terms and values can afford; 0 keeps the ids. */
+int fcx_db_compact(fcx_db *db, const char *dest, int renumber, char **err_out);
 
 /* --- document ------------------------------------------------------------ */
 fcx_doc *fcx_doc_new(void);
