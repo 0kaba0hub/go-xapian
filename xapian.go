@@ -273,11 +273,21 @@ func (d *DB) DocIDs() ([]uint32, error) {
 }
 
 // Compact writes a single optimized copy of the combined database to dest.
-func (d *DB) Compact(dest string) error {
+func (d *DB) Compact(dest string) error { return d.compact(dest, false) }
+
+// CompactRenumbered merges the databases letting the ids be reassigned, which
+// a store that recognises documents by their terms can afford.
+func (d *DB) CompactRenumbered(dest string) error { return d.compact(dest, true) }
+
+func (d *DB) compact(dest string, renumber bool) error {
 	cd := C.CString(dest)
 	defer C.free(unsafe.Pointer(cd))
 	var cerr *C.char
-	if C.fcx_db_compact(d.h, cd, &cerr) != 0 {
+	flag := C.int(0)
+	if renumber {
+		flag = 1
+	}
+	if C.fcx_db_compact(d.h, cd, flag, &cerr) != 0 {
 		return takeErr(cerr)
 	}
 	return nil

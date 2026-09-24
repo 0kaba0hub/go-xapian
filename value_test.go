@@ -278,3 +278,56 @@ func TestATermIsStrippedFromAStoredDocument(t *testing.T) {
 		t.Errorf("the text term names %d documents after the strip, want 1", len(body))
 	}
 }
+
+// Shards of a store keyed by terms start their numbering at one each, so a
+// merge that may not renumber refuses them; one that may, merges.
+func TestCompactRenumbersOverlappingShards(t *testing.T) {
+	root := t.TempDir()
+	var paths []string
+	for i := 0; i < 2; i++ {
+		p := filepath.Join(root, fmt.Sprintf("shard%d", i))
+		w, err := OpenWDB(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := NewDoc()
+		if err := d.AddTerm("Zsame"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.AddDocument(d); err != nil {
+			t.Fatal(err)
+		}
+		d.Free()
+		if err := w.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		w.Close()
+		paths = append(paths, p)
+	}
+
+	db, err := OpenDBMulti(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.Compact(filepath.Join(root, "keep")); err == nil {
+		t.Error("a merge that may not renumber accepted two shards numbered from one")
+	}
+	dest := filepath.Join(root, "merged")
+	if err := db.CompactRenumbered(dest); err != nil {
+		t.Fatalf("the renumbering merge refused them: %v", err)
+	}
+
+	merged, err := OpenDBMulti([]string{dest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer merged.Close()
+	ids, err := merged.DocIDsByTerm("Zsame")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 {
+		t.Errorf("the merged database holds %d documents, two were written", len(ids))
+	}
+}
