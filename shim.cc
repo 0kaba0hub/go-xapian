@@ -58,6 +58,14 @@ void fcx_wdb_close(fcx_wdb *w) {
 	delete static_cast<Xapian::WritableDatabase *>(w);
 }
 
+unsigned int fcx_wdb_add_document(fcx_wdb *w, fcx_doc *d, char **err_out) {
+	FCX_TRY {
+		return static_cast<Xapian::WritableDatabase *>(w)->add_document(
+			*static_cast<Xapian::Document *>(d));
+	}
+	FCX_CATCH(0)
+}
+
 int fcx_wdb_replace_document(fcx_wdb *w, unsigned int docid, fcx_doc *d,
                              char **err_out) {
 	FCX_TRY {
@@ -66,6 +74,77 @@ int fcx_wdb_replace_document(fcx_wdb *w, unsigned int docid, fcx_doc *d,
 		return 0;
 	}
 	FCX_CATCH(-1)
+}
+
+int fcx_wdb_delete_by_term(fcx_wdb *w, const char *term, size_t len,
+                           char **err_out) {
+	FCX_TRY {
+		static_cast<Xapian::WritableDatabase *>(w)->delete_document(
+			std::string(term, len));
+		return 0;
+	}
+	FCX_CATCH(-1)
+}
+
+static int fcx_docids_by_term(Xapian::Database *db, const char *term, size_t len,
+                              unsigned int *buf, size_t cap, char **err_out) {
+	FCX_TRY {
+		std::string t(term, len);
+		size_t n = 0;
+		for (Xapian::PostingIterator it = db->postlist_begin(t);
+		     it != db->postlist_end(t) && n < cap; ++it)
+			buf[n++] = *it;
+		return static_cast<int>(n);
+	}
+	FCX_CATCH(-1)
+}
+
+int fcx_wdb_docids_by_term(fcx_wdb *w, const char *term, size_t len,
+                           unsigned int *buf, size_t cap, char **err_out) {
+	return fcx_docids_by_term(static_cast<Xapian::WritableDatabase *>(w), term,
+	                          len, buf, cap, err_out);
+}
+
+int fcx_db_docids_by_term(fcx_db *db, const char *term, size_t len,
+                          unsigned int *buf, size_t cap, char **err_out) {
+	return fcx_docids_by_term(static_cast<Xapian::Database *>(db), term, len,
+	                          buf, cap, err_out);
+}
+
+char *fcx_wdb_doc_terms(fcx_wdb *w, unsigned int docid, const char *prefix,
+                        size_t plen, size_t *len_out, size_t *examined_out,
+                        char **err_out) {
+	FCX_TRY {
+		Xapian::Document d =
+			static_cast<Xapian::WritableDatabase *>(w)->get_document(docid);
+		std::string pre(prefix, plen), out;
+		size_t examined = 0;
+		Xapian::TermIterator it = d.termlist_begin();
+		/* The term list is sorted, so the prefix is a range: skip to its start
+		 * and stop at its end rather than walking a message's every term. */
+		if (!pre.empty())
+			it.skip_to(pre);
+		for (; it != d.termlist_end(); ++it) {
+			std::string t = *it;
+			++examined;
+			if (!pre.empty() && t.compare(0, pre.size(), pre) != 0)
+				break;
+			out.append(t);
+			out.push_back('\0');
+		}
+		if (examined_out != nullptr)
+			*examined_out = examined;
+		if (len_out != nullptr)
+			*len_out = out.size();
+		if (out.empty())
+			return nullptr;
+		char *buf = static_cast<char *>(malloc(out.size()));
+		if (buf == nullptr)
+			return nullptr;
+		memcpy(buf, out.data(), out.size());
+		return buf;
+	}
+	FCX_CATCH(nullptr)
 }
 
 int fcx_wdb_delete_document(fcx_wdb *w, unsigned int docid, int *existed_out,
@@ -106,6 +185,13 @@ char *fcx_wdb_get_metadata(fcx_wdb *w, const char *key, char **err_out) {
 		return dup_error(v); /* plain malloc'd copy */
 	}
 	FCX_CATCH(nullptr)
+}
+
+unsigned int fcx_wdb_last_docid(fcx_wdb *w, char **err_out) {
+	FCX_TRY {
+		return static_cast<Xapian::WritableDatabase *>(w)->get_lastdocid();
+	}
+	FCX_CATCH(0)
 }
 
 unsigned int fcx_wdb_get_doccount(fcx_wdb *w, char **err_out) {
@@ -211,6 +297,15 @@ int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, size_t len, char **er
 	FCX_CATCH(-1)
 }
 
+int fcx_doc_set_value(fcx_doc *d, unsigned int slot, const char *val, size_t len,
+                      char **err_out) {
+	FCX_TRY {
+		static_cast<Xapian::Document *>(d)->add_value(slot, std::string(val, len));
+		return 0;
+	}
+	FCX_CATCH(-1)
+}
+
 /* --- query --------------------------------------------------------------- */
 
 fcx_query *fcx_query_wildcard(const char *pattern, char **err_out) {
@@ -284,6 +379,24 @@ unsigned int fcx_mset_docid(fcx_mset *m, size_t idx, double *weight_out) {
 	if (weight_out != nullptr)
 		*weight_out = it.get_weight();
 	return *it;
+}
+
+char *fcx_mset_value(fcx_mset *m, size_t idx, unsigned int slot, size_t *len_out,
+                     char **err_out) {
+	FCX_TRY {
+		Xapian::MSet *ms = static_cast<Xapian::MSet *>(m);
+		std::string v = (*ms)[idx].get_document().get_value(slot);
+		if (len_out != nullptr)
+			*len_out = v.size();
+		if (v.empty())
+			return nullptr;
+		char *out = static_cast<char *>(malloc(v.size()));
+		if (out == nullptr)
+			return nullptr;
+		memcpy(out, v.data(), v.size());
+		return out;
+	}
+	FCX_CATCH(nullptr)
 }
 
 void fcx_mset_free(fcx_mset *m) { delete static_cast<Xapian::MSet *>(m); }

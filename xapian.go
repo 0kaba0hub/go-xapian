@@ -24,6 +24,7 @@ import "C"
 
 import (
 	"errors"
+	"strings"
 	"unsafe"
 )
 
@@ -76,8 +77,20 @@ func (w *WDB) ReplaceDocument(docid uint32, d *Doc) error {
 	return nil
 }
 
+// AddDocument lets the database choose the id, which is what a store keyed by
+// a document value rather than by its number wants.
+func (w *WDB) AddDocument(d *Doc) (uint32, error) {
+	var cerr *C.char
+	id := C.fcx_wdb_add_document(w.h, d.h, &cerr)
+	if id == 0 {
+		return 0, takeErr(cerr)
+	}
+	return uint32(id), nil
+}
+
 // DeleteDocument removes docid. existed reports whether it was present;
 // a not-found document is not an error.
+
 func (w *WDB) DeleteDocument(docid uint32) (existed bool, err error) {
 	var cerr *C.char
 	var cex C.int
@@ -85,6 +98,54 @@ func (w *WDB) DeleteDocument(docid uint32) (existed bool, err error) {
 		return false, takeErr(cerr)
 	}
 	return cex != 0, nil
+}
+
+// DeleteByTerm removes every document carrying term: with a term unique to a
+// document that is the delete of that one.
+func (w *WDB) DeleteByTerm(term string) error {
+	var cerr *C.char
+	if C.fcx_wdb_delete_by_term(w.h, termPtr(term), C.size_t(len(term)), &cerr) != 0 {
+		return takeErr(cerr)
+	}
+	return nil
+}
+
+// DocIDsByTerm reads the term's posting list: the ids of the documents that
+// carry it, ascending, without asking the matcher anything.
+func (w *WDB) DocIDsByTerm(term string) ([]uint32, error) {
+	return docIDsByTerm(func(buf *C.uint, cap C.size_t, cerr **C.char) C.int {
+		return C.fcx_wdb_docids_by_term(w.h, termPtr(term), C.size_t(len(term)), buf, cap, cerr)
+	})
+}
+
+// DocTerms lists one document's terms that start with prefix. An empty prefix
+// lists them all.
+func (w *WDB) DocTerms(docid uint32, prefix string) ([]string, error) {
+	terms, _, err := w.docTerms(docid, prefix)
+	return terms, err
+}
+
+// docTerms also says how many terms the walk looked at, which is what tells a
+// prefix range from a walk of the whole document.
+func (w *WDB) docTerms(docid uint32, prefix string) ([]string, int, error) {
+	var cerr *C.char
+	var n, examined C.size_t
+	p := C.fcx_wdb_doc_terms(w.h, C.uint(docid), termPtr(prefix), C.size_t(len(prefix)), &n, &examined, &cerr)
+	if p == nil {
+		if cerr != nil {
+			return nil, 0, takeErr(cerr)
+		}
+		return nil, int(examined), nil
+	}
+	defer C.free(unsafe.Pointer(p))
+	block := C.GoStringN(p, C.int(n))
+	var out []string
+	for _, t := range strings.Split(block, "\x00") {
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	return out, int(examined), nil
 }
 
 // SetMetadata stores an arbitrary key/value pair in the database metadata.
@@ -114,6 +175,7 @@ func (w *WDB) GetMetadata(key string) (string, error) {
 }
 
 // DocCount returns the number of documents in the writable database.
+
 func (w *WDB) DocCount() (uint32, error) {
 	var cerr *C.char
 	n := C.fcx_wdb_get_doccount(w.h, &cerr)
@@ -121,6 +183,17 @@ func (w *WDB) DocCount() (uint32, error) {
 		return 0, takeErr(cerr)
 	}
 	return uint32(n), nil
+}
+
+// LastDocID is the highest id the database has handed out, which is what says
+// how close a long-lived store is to the limit of the type.
+func (w *WDB) LastDocID() (uint32, error) {
+	var cerr *C.char
+	id := C.fcx_wdb_last_docid(w.h, &cerr)
+	if id == 0 && cerr != nil {
+		return 0, takeErr(cerr)
+	}
+	return uint32(id), nil
 }
 
 // DocExists reports whether docid is present.
@@ -249,6 +322,16 @@ func (d *Doc) AddBooleanTerm(term string) error {
 	return nil
 }
 
+// SetValue stores opaque bytes in a numbered slot. A value is not indexed and
+// not searchable, and unlike a term it comes back with a search hit.
+func (d *Doc) SetValue(slot uint32, value string) error {
+	var cerr *C.char
+	if C.fcx_doc_set_value(d.h, C.uint(slot), termPtr(value), C.size_t(len(value)), &cerr) != 0 {
+		return takeErr(cerr)
+	}
+	return nil
+}
+
 // empty backs the pointer for a zero-length term: unsafe.StringData("") may be
 // nil, and a nil pointer with length zero is not the same argument to C as a
 // valid pointer with length zero.
@@ -330,10 +413,50 @@ func (q *Query) Free() {
 type MSetEntry struct {
 	DocID  uint32
 	Weight float64
+	// Value is the document value asked for by SearchWithValue, empty otherwise.
+	Value string
+}
+
+// SearchWithValue is Search with the value in slot carried back on every hit,
+// which is what a docid alone no longer says.
+func (d *DB) SearchWithValue(q *Query, slot uint32) ([]MSetEntry, error) {
+	return d.search(q, true, slot)
+}
+
+// DocIDsByTerm reads the term's posting list on the read database.
+func (d *DB) DocIDsByTerm(term string) ([]uint32, error) {
+	return docIDsByTerm(func(buf *C.uint, cap C.size_t, cerr **C.char) C.int {
+		return C.fcx_db_docids_by_term(d.h, termPtr(term), C.size_t(len(term)), buf, cap, cerr)
+	})
+}
+
+// docIDsByTerm grows the buffer until the shim stops filling it: a term may
+// name one document or every document in the database.
+func docIDsByTerm(fill func(buf *C.uint, cap C.size_t, cerr **C.char) C.int) ([]uint32, error) {
+	for capacity := 64; ; capacity *= 4 {
+		buf := make([]C.uint, capacity)
+		var cerr *C.char
+		n := int(fill(&buf[0], C.size_t(capacity), &cerr))
+		if n < 0 {
+			return nil, takeErr(cerr)
+		}
+		if n == capacity {
+			continue
+		}
+		out := make([]uint32, n)
+		for i := 0; i < n; i++ {
+			out[i] = uint32(buf[i])
+		}
+		return out, nil
+	}
 }
 
 // Search runs q against the read database and returns the ranked hits.
 func (d *DB) Search(q *Query) ([]MSetEntry, error) {
+	return d.search(q, false, 0)
+}
+
+func (d *DB) search(q *Query, withValue bool, slot uint32) ([]MSetEntry, error) {
 	var cerr *C.char
 	m := C.fcx_db_search(d.h, q.h, &cerr)
 	if m == nil {
@@ -345,7 +468,19 @@ func (d *DB) Search(q *Query) ([]MSetEntry, error) {
 	for i := 0; i < n; i++ {
 		var w C.double
 		docid := C.fcx_mset_docid(m, C.size_t(i), &w)
-		out = append(out, MSetEntry{DocID: uint32(docid), Weight: float64(w)})
+		ent := MSetEntry{DocID: uint32(docid), Weight: float64(w)}
+		if withValue {
+			var vlen C.size_t
+			var verr *C.char
+			vp := C.fcx_mset_value(m, C.size_t(i), C.uint(slot), &vlen, &verr)
+			if vp != nil {
+				ent.Value = C.GoStringN(vp, C.int(vlen))
+				C.free(unsafe.Pointer(vp))
+			} else if verr != nil {
+				return nil, takeErr(verr)
+			}
+		}
+		out = append(out, ent)
 	}
 	return out, nil
 }

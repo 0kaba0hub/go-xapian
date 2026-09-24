@@ -21,15 +21,34 @@ typedef void fcx_mset;  /* Xapian::MSet */
 fcx_wdb *fcx_wdb_open(const char *path, char **err_out);
 int fcx_wdb_commit(fcx_wdb *w, char **err_out);
 void fcx_wdb_close(fcx_wdb *w);
+/* Lets the database choose the id: returns it, or 0 with err_out set. */
+unsigned int fcx_wdb_add_document(fcx_wdb *w, fcx_doc *d, char **err_out);
 int fcx_wdb_replace_document(fcx_wdb *w, unsigned int docid, fcx_doc *d,
                              char **err_out);
 /* existed_out: 1 when the document was present. DocNotFound is not an error. */
+/* Deletes every document carrying term (Xapian's unique-term delete). */
+int fcx_wdb_delete_by_term(fcx_wdb *w, const char *term, size_t len,
+                           char **err_out);
+/* Docids carrying term, ascending, up to cap; returns the count, -1 on error.
+ * Reads the postlist, so it costs no match decision. */
+int fcx_wdb_docids_by_term(fcx_wdb *w, const char *term, size_t len,
+                           unsigned int *buf, size_t cap, char **err_out);
+/* The terms of one document that start with prefix, as a NUL-separated block.
+ * The caller frees the block with free(); len_out is its length. The walk
+ * skips to the prefix and stops at its end; examined_out, when not NULL, is
+ * how many terms it looked at. */
+char *fcx_wdb_doc_terms(fcx_wdb *w, unsigned int docid, const char *prefix,
+                        size_t plen, size_t *len_out, size_t *examined_out,
+                        char **err_out);
 int fcx_wdb_delete_document(fcx_wdb *w, unsigned int docid, int *existed_out,
                             char **err_out);
 int fcx_wdb_set_metadata(fcx_wdb *w, const char *key, const char *value,
                          char **err_out);
 char *fcx_wdb_get_metadata(fcx_wdb *w, const char *key, char **err_out);
 unsigned int fcx_wdb_get_doccount(fcx_wdb *w, char **err_out);
+/* The highest id handed out; 0 with err_out set on error, 0 and no error on an
+ * empty database. Says how close a long-lived store is to the type's limit. */
+unsigned int fcx_wdb_last_docid(fcx_wdb *w, char **err_out);
 int fcx_wdb_doc_exists(fcx_wdb *w, unsigned int docid, char **err_out);
 
 /* --- combined read-only database ---------------------------------------- */
@@ -51,6 +70,10 @@ void fcx_doc_free(fcx_doc *d);
  * that Xapian keeps; neither retains the pointer past the call. */
 int fcx_doc_add_term(fcx_doc *d, const char *term, size_t len, char **err_out);
 int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, size_t len, char **err_out);
+/* A document value: opaque bytes in a numbered slot, returned with a search
+ * hit. Unlike a term it is not indexed, and unlike a term it can be read back. */
+int fcx_doc_set_value(fcx_doc *d, unsigned int slot, const char *val, size_t len,
+                      char **err_out);
 
 /* --- query --------------------------------------------------------------- */
 /* op values mirror Xapian::Query::op */
@@ -73,6 +96,13 @@ fcx_mset *fcx_db_search(fcx_db *db, fcx_query *q, char **err_out);
 size_t fcx_mset_size(fcx_mset *m);
 /* idx < fcx_mset_size(); weight_out may be NULL. */
 unsigned int fcx_mset_docid(fcx_mset *m, size_t idx, double *weight_out);
+/* The value in slot for the hit at idx. The bytes belong to the caller and are
+ * freed with free(); len_out is set to their length. NULL means empty. */
+/* Docids carrying term, ascending, up to cap; returns the count, -1 on error. */
+int fcx_db_docids_by_term(fcx_db *db, const char *term, size_t len,
+                          unsigned int *buf, size_t cap, char **err_out);
+char *fcx_mset_value(fcx_mset *m, size_t idx, unsigned int slot, size_t *len_out,
+                     char **err_out);
 void fcx_mset_free(fcx_mset *m);
 
 #ifdef __cplusplus
