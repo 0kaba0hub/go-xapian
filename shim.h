@@ -34,9 +34,12 @@ int fcx_wdb_delete_by_term(fcx_wdb *w, const char *term, size_t len,
 int fcx_wdb_docids_by_term(fcx_wdb *w, const char *term, size_t len,
                            unsigned int *buf, size_t cap, char **err_out);
 /* The terms of one document that start with prefix, as a NUL-separated block.
- * The caller frees the block with free(); len_out is its length. */
+ * The caller frees the block with free(); len_out is its length. The walk
+ * skips to the prefix and stops at its end; examined_out, when not NULL, is
+ * how many terms it looked at. */
 char *fcx_wdb_doc_terms(fcx_wdb *w, unsigned int docid, const char *prefix,
-                        size_t plen, size_t *len_out, char **err_out);
+                        size_t plen, size_t *len_out, size_t *examined_out,
+                        char **err_out);
 int fcx_wdb_delete_document(fcx_wdb *w, unsigned int docid, int *existed_out,
                             char **err_out);
 int fcx_wdb_set_metadata(fcx_wdb *w, const char *key, const char *value,

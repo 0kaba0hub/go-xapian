@@ -121,14 +121,21 @@ func (w *WDB) DocIDsByTerm(term string) ([]uint32, error) {
 // DocTerms lists one document's terms that start with prefix. An empty prefix
 // lists them all.
 func (w *WDB) DocTerms(docid uint32, prefix string) ([]string, error) {
+	terms, _, err := w.docTerms(docid, prefix)
+	return terms, err
+}
+
+// docTerms also says how many terms the walk looked at, which is what tells a
+// prefix range from a walk of the whole document.
+func (w *WDB) docTerms(docid uint32, prefix string) ([]string, int, error) {
 	var cerr *C.char
-	var n C.size_t
-	p := C.fcx_wdb_doc_terms(w.h, C.uint(docid), termPtr(prefix), C.size_t(len(prefix)), &n, &cerr)
+	var n, examined C.size_t
+	p := C.fcx_wdb_doc_terms(w.h, C.uint(docid), termPtr(prefix), C.size_t(len(prefix)), &n, &examined, &cerr)
 	if p == nil {
 		if cerr != nil {
-			return nil, takeErr(cerr)
+			return nil, 0, takeErr(cerr)
 		}
-		return nil, nil
+		return nil, int(examined), nil
 	}
 	defer C.free(unsafe.Pointer(p))
 	block := C.GoStringN(p, C.int(n))
@@ -138,7 +145,7 @@ func (w *WDB) DocTerms(docid uint32, prefix string) ([]string, error) {
 			out = append(out, t)
 		}
 	}
-	return out, nil
+	return out, int(examined), nil
 }
 
 // SetMetadata stores an arbitrary key/value pair in the database metadata.
@@ -410,9 +417,8 @@ type MSetEntry struct {
 	Value string
 }
 
-// SearchWithValue is Search, with the value in slot carried back on every hit:
-// a database holding documents of more than one mailbox needs what the docid
-// alone no longer says.
+// SearchWithValue is Search with the value in slot carried back on every hit,
+// which is what a docid alone no longer says.
 func (d *DB) SearchWithValue(q *Query, slot uint32) ([]MSetEntry, error) {
 	return d.search(q, true, slot)
 }

@@ -1,6 +1,7 @@
 package xapian
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 )
@@ -173,5 +174,48 @@ func TestATermFindsReadsAndDeletesTheDocument(t *testing.T) {
 	}
 	if len(left) != 1 {
 		t.Errorf("after deleting by one term %d documents carry the other, want 1", len(left))
+	}
+}
+
+// The prefix is a range in a sorted term list, not a filter over it: a message
+// carries hundreds of text terms and the copy-removal path wants two.
+func TestDocTermsWalksThePrefixRangeOnly(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	w, err := OpenWDB(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	d := NewDoc()
+	for i := 0; i < 500; i++ {
+		if err := d.AddTerm(fmt.Sprintf("Zword%03d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{"XFaaa", "XFbbb"} {
+		if err := d.AddBooleanTerm(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id, err := w.AddDocument(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Free()
+	if err := w.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	terms, examined, err := w.docTerms(id, "XF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(terms) != 2 || terms[0] != "XFaaa" || terms[1] != "XFbbb" {
+		t.Fatalf("the document answers %v, want the two XF terms", terms)
+	}
+	// Two in the range and the one after it that ends the walk: anything near
+	// 502 means the whole term list was read.
+	if examined > 3 {
+		t.Errorf("the walk looked at %d terms for two, so it did not skip to the prefix", examined)
 	}
 }

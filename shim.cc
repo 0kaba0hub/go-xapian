@@ -112,19 +112,28 @@ int fcx_db_docids_by_term(fcx_db *db, const char *term, size_t len,
 }
 
 char *fcx_wdb_doc_terms(fcx_wdb *w, unsigned int docid, const char *prefix,
-                        size_t plen, size_t *len_out, char **err_out) {
+                        size_t plen, size_t *len_out, size_t *examined_out,
+                        char **err_out) {
 	FCX_TRY {
 		Xapian::Document d =
 			static_cast<Xapian::WritableDatabase *>(w)->get_document(docid);
 		std::string pre(prefix, plen), out;
-		for (Xapian::TermIterator it = d.termlist_begin();
-		     it != d.termlist_end(); ++it) {
+		size_t examined = 0;
+		Xapian::TermIterator it = d.termlist_begin();
+		/* The term list is sorted, so the prefix is a range: skip to its start
+		 * and stop at its end rather than walking a message's every term. */
+		if (!pre.empty())
+			it.skip_to(pre);
+		for (; it != d.termlist_end(); ++it) {
 			std::string t = *it;
+			++examined;
 			if (!pre.empty() && t.compare(0, pre.size(), pre) != 0)
-				continue;
+				break;
 			out.append(t);
 			out.push_back('\0');
 		}
+		if (examined_out != nullptr)
+			*examined_out = examined;
 		if (len_out != nullptr)
 			*len_out = out.size();
 		if (out.empty())
