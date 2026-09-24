@@ -69,6 +69,14 @@ func (w *WDB) Close() {
 }
 
 // ReplaceDocument stores d under docid, replacing any existing document.
+func (w *WDB) ReplaceDocument(docid uint32, d *Doc) error {
+	var cerr *C.char
+	if C.fcx_wdb_replace_document(w.h, C.uint(docid), d.h, &cerr) != 0 {
+		return takeErr(cerr)
+	}
+	return nil
+}
+
 // AddDocument lets the database choose the id, which is what a store keyed by
 // a document value rather than by its number wants.
 func (w *WDB) AddDocument(d *Doc) (uint32, error) {
@@ -80,19 +88,20 @@ func (w *WDB) AddDocument(d *Doc) (uint32, error) {
 	return uint32(id), nil
 }
 
-func (w *WDB) ReplaceDocument(docid uint32, d *Doc) error {
-	var cerr *C.char
-	if C.fcx_wdb_replace_document(w.h, C.uint(docid), d.h, &cerr) != 0 {
-		return takeErr(cerr)
-	}
-	return nil
-}
-
 // DeleteDocument removes docid. existed reports whether it was present;
 // a not-found document is not an error.
-// DeleteByTerm removes every document carrying term. With a term that is
-// unique per document this is the delete; with one shared by several it is
-// the delete of all of them.
+
+func (w *WDB) DeleteDocument(docid uint32) (existed bool, err error) {
+	var cerr *C.char
+	var cex C.int
+	if C.fcx_wdb_delete_document(w.h, C.uint(docid), &cex, &cerr) != 0 {
+		return false, takeErr(cerr)
+	}
+	return cex != 0, nil
+}
+
+// DeleteByTerm removes every document carrying term: with a term unique to a
+// document that is the delete of that one.
 func (w *WDB) DeleteByTerm(term string) error {
 	var cerr *C.char
 	if C.fcx_wdb_delete_by_term(w.h, termPtr(term), C.size_t(len(term)), &cerr) != 0 {
@@ -132,15 +141,6 @@ func (w *WDB) DocTerms(docid uint32, prefix string) ([]string, error) {
 	return out, nil
 }
 
-func (w *WDB) DeleteDocument(docid uint32) (existed bool, err error) {
-	var cerr *C.char
-	var cex C.int
-	if C.fcx_wdb_delete_document(w.h, C.uint(docid), &cex, &cerr) != 0 {
-		return false, takeErr(cerr)
-	}
-	return cex != 0, nil
-}
-
 // SetMetadata stores an arbitrary key/value pair in the database metadata.
 func (w *WDB) SetMetadata(key, value string) error {
 	ck := C.CString(key)
@@ -168,6 +168,16 @@ func (w *WDB) GetMetadata(key string) (string, error) {
 }
 
 // DocCount returns the number of documents in the writable database.
+
+func (w *WDB) DocCount() (uint32, error) {
+	var cerr *C.char
+	n := C.fcx_wdb_get_doccount(w.h, &cerr)
+	if cerr != nil {
+		return 0, takeErr(cerr)
+	}
+	return uint32(n), nil
+}
+
 // LastDocID is the highest id the database has handed out, which is what says
 // how close a long-lived store is to the limit of the type.
 func (w *WDB) LastDocID() (uint32, error) {
@@ -177,15 +187,6 @@ func (w *WDB) LastDocID() (uint32, error) {
 		return 0, takeErr(cerr)
 	}
 	return uint32(id), nil
-}
-
-func (w *WDB) DocCount() (uint32, error) {
-	var cerr *C.char
-	n := C.fcx_wdb_get_doccount(w.h, &cerr)
-	if cerr != nil {
-		return 0, takeErr(cerr)
-	}
-	return uint32(n), nil
 }
 
 // DocExists reports whether docid is present.
