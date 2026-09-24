@@ -322,6 +322,27 @@ func (d *Doc) AddBooleanTerm(term string) error {
 	return nil
 }
 
+// GetDocument reads a stored document for editing; replace it with
+// ReplaceDocument under the same id. Free it when done.
+func (w *WDB) GetDocument(docid uint32) (*Doc, error) {
+	var cerr *C.char
+	h := C.fcx_wdb_get_document(w.h, C.uint(docid), &cerr)
+	if h == nil {
+		return nil, takeErr(cerr)
+	}
+	return &Doc{h: h}, nil
+}
+
+// RemoveTerm drops one term. A term the document does not carry is not an
+// error: the state the caller asked for is the state it is already in.
+func (d *Doc) RemoveTerm(term string) error {
+	var cerr *C.char
+	if C.fcx_doc_remove_term(d.h, termPtr(term), C.size_t(len(term)), &cerr) != 0 {
+		return takeErr(cerr)
+	}
+	return nil
+}
+
 // SetValue stores opaque bytes in a numbered slot. A value is not indexed and
 // not searchable, and unlike a term it comes back with a search hit.
 func (d *Doc) SetValue(slot uint32, value string) error {

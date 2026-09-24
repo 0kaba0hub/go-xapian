@@ -72,6 +72,12 @@ int fcx_doc_add_term(fcx_doc *d, const char *term, size_t len, char **err_out);
 int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, size_t len, char **err_out);
 /* A document value: opaque bytes in a numbered slot, returned with a search
  * hit. Unlike a term it is not indexed, and unlike a term it can be read back. */
+/* The document as the database holds it, for editing and replacing. Freed
+ * with fcx_doc_free. */
+fcx_doc *fcx_wdb_get_document(fcx_wdb *w, unsigned int docid, char **err_out);
+/* Removes one term; a term the document does not carry is not an error. */
+int fcx_doc_remove_term(fcx_doc *d, const char *term, size_t len,
+                        char **err_out);
 int fcx_doc_set_value(fcx_doc *d, unsigned int slot, const char *val, size_t len,
                       char **err_out);
 

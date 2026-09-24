@@ -219,3 +219,62 @@ func TestDocTermsWalksThePrefixRangeOnly(t *testing.T) {
 		t.Errorf("the walk looked at %d terms for two, so it did not skip to the prefix", examined)
 	}
 }
+
+// A copy is removed from a message's document by stripping its terms, not by
+// rewriting the document: the text terms and their positions cannot be rebuilt.
+func TestATermIsStrippedFromAStoredDocument(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "db")
+	w, err := OpenWDB(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	d := NewDoc()
+	for _, term := range []string{"Zbody", "XFaaa", "XFbbb"} {
+		if err := d.AddTerm(term); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id, err := w.AddDocument(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Free()
+	if err := w.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	stored, err := w.GetDocument(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stored.RemoveTerm("XFaaa"); err != nil {
+		t.Fatal(err)
+	}
+	// A term it does not carry is not an error: the copy is already gone.
+	if err := stored.RemoveTerm("XFzzz"); err != nil {
+		t.Fatalf("removing a term the document does not carry failed: %v", err)
+	}
+	if err := w.ReplaceDocument(id, stored); err != nil {
+		t.Fatal(err)
+	}
+	stored.Free()
+	if err := w.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	terms, err := w.DocTerms(id, "XF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(terms) != 1 || terms[0] != "XFbbb" {
+		t.Errorf("the document carries %v after the strip, want XFbbb alone", terms)
+	}
+	body, err := w.DocIDsByTerm("Zbody")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) != 1 {
+		t.Errorf("the text term names %d documents after the strip, want 1", len(body))
+	}
+}
