@@ -297,6 +297,29 @@ int fcx_doc_add_boolean_term(fcx_doc *d, const char *term, size_t len, char **er
 	FCX_CATCH(-1)
 }
 
+fcx_doc *fcx_wdb_get_document(fcx_wdb *w, unsigned int docid, char **err_out) {
+	FCX_TRY {
+		return new Xapian::Document(
+			static_cast<Xapian::WritableDatabase *>(w)->get_document(docid));
+	}
+	FCX_CATCH(nullptr)
+}
+
+int fcx_doc_remove_term(fcx_doc *d, const char *term, size_t len,
+                        char **err_out) {
+	FCX_TRY {
+		try {
+			static_cast<Xapian::Document *>(d)->remove_term(
+				std::string(term, len));
+		} catch (const Xapian::InvalidArgumentError &) {
+			/* Not carried: the copy is already gone, which is the state the
+			 * caller wanted. */
+		}
+		return 0;
+	}
+	FCX_CATCH(-1)
+}
+
 int fcx_doc_set_value(fcx_doc *d, unsigned int slot, const char *val, size_t len,
                       char **err_out) {
 	FCX_TRY {
